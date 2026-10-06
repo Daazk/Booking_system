@@ -2,9 +2,14 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.models import Booking
 from app.schemas.bookings import BookingCreate
+
+
+class BookingOverlapError(Exception):
+    pass
 
 
 class BookingRepository:
@@ -14,7 +19,18 @@ class BookingRepository:
     def create(self, data: BookingCreate) -> Booking:
         booking = Booking(**data.model_dump())
         self.session.add(booking)
-        self.session.commit()
+        try:
+            self.session.commit()
+
+        except IntegrityError as e:
+            self.session.rollback()
+
+            if (
+                getattr(e.orig.diag, "constraint_name", None) == "bookings_no_overlap"
+            ):  # (e.orig.diag) это диагностическая инфа psql
+                raise BookingOverlapError from e
+            raise
+
         self.session.refresh(booking)
         return booking
 

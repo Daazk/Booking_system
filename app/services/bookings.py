@@ -4,7 +4,7 @@ from datetime import date
 from fastapi import HTTPException, status
 
 from app.models import Booking
-from app.repositories.bookings import BookingRepository
+from app.repositories.bookings import BookingRepository, BookingOverlapError
 from app.repositories.rooms import RoomRepository
 from app.schemas.bookings import BookingCreate
 
@@ -22,11 +22,18 @@ class BookingService:
 
         if self.booking_repo.has_overlap(data.room_id, data.start_time, data.end_time):
             raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
+                status.HTTP_409_CONFLICT,
                 "Room is already booked for this slot",
             )
 
-        return self.booking_repo.create(data)
+        try:
+            return self.booking_repo.create(data)
+
+        except BookingOverlapError:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Room is already booked for this slot",
+            )
 
     def get_bookings(
         self, room_id: int | None = None, day: date | None = None
